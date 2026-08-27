@@ -1,0 +1,369 @@
+openapi: 3.1.0
+info:
+  title: Event Ticket Reservation API
+  version: 1.0.0
+  description: Laravel Sanctum personal access token を利用するイベント予約 API。
+servers:
+  - url: http://localhost:8000/api
+security: []
+tags:
+  - name: Auth
+  - name: Events
+  - name: Reservations
+paths:
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: ユーザー登録
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SignupRequest'}
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthResponse'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: ログイン
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: ログイン成功
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: 現在の Token を失効
+      security: [{bearerAuth: []}]
+      responses:
+        '204': {description: ログアウト成功}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: 現在のユーザーを取得
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: ユーザー
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /events:
+    get:
+      tags: [Events]
+      summary: Event 検索
+      description: 匿名/USER は PUBLISHED のみ。ADMIN の Bearer Token では全 status を取得できる。
+      security: [{}, {bearerAuth: []}]
+      parameters:
+        - {name: keyword, in: query, schema: {type: string, maxLength: 255}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/EventStatus'}}
+        - {name: starts_from, in: query, schema: {type: string, format: date-time}}
+        - {name: starts_to, in: query, schema: {type: string, format: date-time}}
+        - name: sort
+          in: query
+          schema: {type: string, enum: [starts_at, -starts_at, created_at, -created_at, title, -title]}
+        - {name: page, in: query, schema: {type: integer, minimum: 1}}
+        - {name: per_page, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Event ページ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+    post:
+      tags: [Events]
+      summary: Event 作成（ADMIN）
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventWrite'}
+      responses:
+        '201': {$ref: '#/components/responses/EventResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /events/{event}:
+    parameters:
+      - {$ref: '#/components/parameters/EventId'}
+    get:
+      tags: [Events]
+      summary: Event 詳細
+      security: [{}, {bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/EventResponse'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Events]
+      summary: Event 更新・状態変更（ADMIN）
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventPatch'}
+      responses:
+        '200': {$ref: '#/components/responses/EventResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+    delete:
+      tags: [Events]
+      summary: Event 削除（ADMIN）
+      security: [{bearerAuth: []}]
+      responses:
+        '204': {description: 削除成功}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /events/{event}/reservations:
+    post:
+      tags: [Reservations]
+      summary: Event を予約（USER）
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+      responses:
+        '201': {$ref: '#/components/responses/ReservationResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /me/reservations:
+    get:
+      tags: [Reservations]
+      summary: 自分の予約一覧
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Reservation ページ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReservationPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /me/reservations/{reservation}:
+    parameters:
+      - {$ref: '#/components/parameters/ReservationId'}
+    get:
+      tags: [Reservations]
+      summary: 自分の予約詳細
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/ReservationResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/ReservationNotFound'}
+    delete:
+      tags: [Reservations]
+      summary: 自分の予約を取消
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/ReservationResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/ReservationNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+  parameters:
+    EventId:
+      name: event
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ReservationId:
+      name: reservation
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    EventResponse:
+      description: Event
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/Event'}
+    ReservationResponse:
+      description: Reservation
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/Reservation'}
+    Unauthorized:
+      description: Token がない、または無効
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Forbidden:
+      description: 権限不足
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: Event が存在しない、または閲覧不可
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    ReservationNotFound:
+      description: Reservation が存在しない、または所有者ではない
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Conflict:
+      description: 業務ルール違反
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    ValidationError:
+      description: 入力エラー
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  schemas:
+    UserRole: {type: string, enum: [USER, ADMIN]}
+    EventStatus: {type: string, enum: [DRAFT, PUBLISHED, CLOSED, CANCELLED]}
+    ReservationStatus: {type: string, enum: [RESERVED, CANCELLED]}
+    TicketStatus: {type: string, enum: [VALID, CANCELLED]}
+    SignupRequest:
+      type: object
+      required: [name, email, password, password_confirmation]
+      properties:
+        name: {type: string, maxLength: 255}
+        email: {type: string, format: email, maxLength: 255}
+        password: {type: string, minLength: 8, maxLength: 255}
+        password_confirmation: {type: string}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email}
+        password: {type: string}
+    AuthResponse:
+      type: object
+      required: [data, token]
+      properties:
+        data: {$ref: '#/components/schemas/User'}
+        token: {type: string}
+    User:
+      type: object
+      required: [id, name, email, role, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        email: {type: string, format: email}
+        role: {$ref: '#/components/schemas/UserRole'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    EventWrite:
+      type: object
+      required: [title, description, venue, starts_at, ends_at, capacity]
+      properties:
+        title: {type: string, maxLength: 255}
+        description: {type: string, maxLength: 10000}
+        venue: {type: string, maxLength: 255}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        capacity: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/EventStatus'}
+    EventPatch:
+      type: object
+      properties:
+        title: {type: string, maxLength: 255}
+        description: {type: string, maxLength: 10000}
+        venue: {type: string, maxLength: 255}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        capacity: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/EventStatus'}
+    Event:
+      type: object
+      required: [id, title, description, venue, starts_at, ends_at, capacity, reserved_count, remaining_capacity, status, created_by]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        description: {type: string}
+        venue: {type: string}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        capacity: {type: integer}
+        reserved_count: {type: integer}
+        remaining_capacity: {type: integer}
+        status: {$ref: '#/components/schemas/EventStatus'}
+        created_by: {type: string, format: uuid}
+        creator: {$ref: '#/components/schemas/User'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    Ticket:
+      type: object
+      required: [id, reservation_id, ticket_number, status, issued_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        reservation_id: {type: string, format: uuid}
+        ticket_number: {type: string}
+        status: {$ref: '#/components/schemas/TicketStatus'}
+        issued_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    Reservation:
+      type: object
+      required: [id, user_id, event_id, status, reserved_at, event, ticket]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        event_id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/ReservationStatus'}
+        reserved_at: {type: string, format: date-time}
+        cancelled_at: {type: [string, 'null'], format: date-time}
+        event: {$ref: '#/components/schemas/Event'}
+        ticket: {$ref: '#/components/schemas/Ticket'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    EventPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMeta'}
+        - type: object
+          properties:
+            data: {type: array, items: {$ref: '#/components/schemas/Event'}}
+    ReservationPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMeta'}
+        - type: object
+          properties:
+            data: {type: array, items: {$ref: '#/components/schemas/Reservation'}}
+    PageMeta:
+      type: object
+      required: [data, links, meta]
+      properties:
+        links: {type: object, additionalProperties: true}
+        meta: {type: object, additionalProperties: true}
+    Error:
+      type: object
+      required: [message, code, errors]
+      properties:
+        message: {type: string}
+        code:
+          type: string
+          enum: [INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS, EVENT_NOT_FOUND, EVENT_NOT_PUBLISHED, EVENT_SOLD_OUT, ALREADY_RESERVED, RESERVATION_NOT_FOUND, RESERVATION_ALREADY_CANCELLED, UNAUTHORIZED, FORBIDDEN, VALIDATION_ERROR]
+        errors:
+          type: [object, 'null']
+          additionalProperties: true

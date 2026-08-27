@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: event_ticket
+      POSTGRES_USER: event_ticket
+      POSTGRES_PASSWORD: event_ticket
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U event_ticket -d event_ticket"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      APP_NAME: EventTicket
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: event_ticket
+      DB_USERNAME: event_ticket
+      DB_PASSWORD: event_ticket
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "export APP_KEY=$$(php artisan key:generate --show --no-ansi) && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"]
+
+  web:
+    build:
+      context: ./apps/web
+    environment:
+      NODE_ENV: production
+      LARAVEL_API_URL: http://api:8000
+      AUTH_COOKIE_SECURE: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
